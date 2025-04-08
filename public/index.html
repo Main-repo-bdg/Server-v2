@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terminal Server</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.1.0/css/xterm.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <!-- Login Section -->
+    <div id="auth-container" class="auth-container">
+      <div class="auth-form-container">
+        <div class="logo-container">
+          <i class="fas fa-terminal"></i>
+          <h1>Terminal Server</h1>
+        </div>
+        
+        <!-- Login Form -->
+        <div id="login-form" class="auth-form">
+          <h2>Login</h2>
+          <div class="input-group">
+            <label for="login-username">Username</label>
+            <input type="text" id="login-username" placeholder="Enter username">
+          </div>
+          <div class="input-group">
+            <label for="login-password">Password</label>
+            <input type="password" id="login-password" placeholder="Enter password">
+          </div>
+          <div class="error-message" id="login-error"></div>
+          <button id="login-button" class="btn btn-primary">Login</button>
+          <p class="auth-form-link">
+            Don't have an account? <a href="#" id="show-register">Register</a>
+          </p>
+        </div>
+        
+        <!-- Registration Form -->
+        <div id="register-form" class="auth-form" style="display: none;">
+          <h2>Register</h2>
+          <div class="input-group">
+            <label for="register-username">Username</label>
+            <input type="text" id="register-username" placeholder="Choose a username">
+          </div>
+          <div class="input-group">
+            <label for="register-password">Password</label>
+            <input type="password" id="register-password" placeholder="Choose a password">
+          </div>
+          <div class="input-group">
+            <label for="register-confirm-password">Confirm Password</label>
+            <input type="password" id="register-confirm-password" placeholder="Confirm password">
+          </div>
+          <div class="input-group">
+            <label for="admin-key">Admin Key (Optional)</label>
+            <input type="password" id="admin-key" placeholder="Admin key (if you have one)">
+          </div>
+          <div class="error-message" id="register-error"></div>
+          <button id="register-button" class="btn btn-primary">Register</button>
+          <p class="auth-form-link">
+            Already have an account? <a href="#" id="show-login">Login</a>
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Main App Section -->
+    <div id="main-container" class="main-container" style="display: none;">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-header">
+          <i class="fas fa-terminal"></i>
+          <h2>Terminal Server</h2>
+        </div>
+        
+        <div class="sidebar-user">
+          <i class="fas fa-user-circle"></i>
+          <span id="username-display">Username</span>
+        </div>
+        
+        <div class="sidebar-menu">
+          <button id="new-session-btn" class="sidebar-button">
+            <i class="fas fa-plus"></i> New Session
+          </button>
+          
+          <div class="sidebar-section">
+            <h3>My Sessions</h3>
+            <div id="sessions-list" class="sessions-list">
+              <!-- Sessions will be listed here dynamically -->
+            </div>
+          </div>
+          
+          <div id="admin-panel" class="sidebar-section" style="display: none;">
+            <h3>Admin</h3>
+            <button id="view-all-sessions-btn" class="sidebar-button">
+              <i class="fas fa-users"></i> All Sessions
+            </button>
+          </div>
+        </div>
+        
+        <div class="sidebar-footer">
+          <button id="logout-btn" class="sidebar-button">
+            <i class="fas fa-sign-out-alt"></i> Logout
+          </button>
+        </div>
+      </div>
+      
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Terminal Header -->
+        <div class="terminal-header">
+          <div class="terminal-info">
+            <span id="current-session-id">No Active Session</span>
+            <span id="session-status" class="session-status"></span>
+          </div>
+          <div class="terminal-controls">
+            <button id="terminal-clear-btn" class="control-button" title="Clear Terminal">
+              <i class="fas fa-eraser"></i>
+            </button>
+            <button id="terminal-settings-btn" class="control-button" title="Terminal Settings">
+              <i class="fas fa-cog"></i>
+            </button>
+            <button id="terminal-fullscreen-btn" class="control-button" title="Toggle Fullscreen">
+              <i class="fas fa-expand"></i>
+            </button>
+            <button id="terminal-close-btn" class="control-button" title="Close Session">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Terminal Container -->
+        <div id="terminal-container" class="terminal-container">
+          <div id="terminal-welcome" class="terminal-welcome">
+            <h2>Welcome to Terminal Server</h2>
+            <p>Create a new session or select an existing one to begin.</p>
+            <button id="welcome-new-session-btn" class="btn btn-primary">
+              <i class="fas fa-plus"></i> Create New Session
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Terminal Settings</h2>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="settings-section">
+            <h3>Appearance</h3>
+            <div class="setting-item">
+              <label for="font-size">Font Size</label>
+              <select id="font-size">
+                <option value="12">12px</option>
+                <option value="14" selected>14px</option>
+                <option value="16">16px</option>
+                <option value="18">18px</option>
+                <option value="20">20px</option>
+              </select>
+            </div>
+            <div class="setting-item">
+              <label for="theme-select">Theme</label>
+              <select id="theme-select">
+                <option value="dark" selected>Dark</option>
+                <option value="light">Light</option>
+                <option value="dracula">Dracula</option>
+                <option value="monokai">Monokai</option>
+              </select>
+            </div>
+          </div>
+          <div class="settings-section">
+            <h3>Terminal</h3>
+            <div class="setting-item">
+              <label>
+                <input type="checkbox" id="setting-bell" checked>
+                Enable Bell Sound
+              </label>
+            </div>
+            <div class="setting-item">
+              <label>
+                <input type="checkbox" id="setting-cursor-blink" checked>
+                Cursor Blink
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="settings-save" class="btn btn-primary">Save Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/npm/xterm@5.1.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.7.0/lib/xterm-addon-fit.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xterm-addon-web-links@0.8.0/lib/xterm-addon-web-links.min.js"></script>
+  <script src="js/auth.js"></script>
+  <script src="js/terminal.js"></script>
+  <script src="js/sessions.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
