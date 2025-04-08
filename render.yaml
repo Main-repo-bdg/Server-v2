@@ -4,18 +4,27 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     plan: free  # Explicitly set to free tier
+    disk:
+      name: terminal-logs
+      mountPath: /app/logs
+      sizeGB: 1  # 1GB should be sufficient for logs
     envVars:
       - key: API_KEY
-        sync: false
+        sync: false  # This will prompt for the value during deployment
       - key: SESSION_TIMEOUT
-        value: 3600000
+        value: 3600000  # 1 hour in milliseconds
       - key: MAX_CONTAINERS
-        value: 100
+        value: 100  # Maximum number of concurrent terminal sessions
       - key: CONTAINER_MEMORY
-        value: 256m  # Fits within 512 MB limit
+        value: 256m  # Memory limit per container - fits within free tier limit
       - key: CONTAINER_CPU
-        value: 0.1  # Matches free tier's 0.1 vCPU
+        value: 0.1  # CPU limit per container - matches free tier's 0.1 vCPU
       - key: USER_CONTAINER_IMAGE
-        value: terminal-user-image:latest
+        # IMPORTANT: This must be a publicly accessible Docker image!
+        # Before deployment, build and push the user container image to Docker Hub:
+        # docker build -t yourusername/terminal-user-image:latest -f Dockerfile.user .
+        # docker push yourusername/terminal-user-image:latest
+        # Then update this value to point to your Docker Hub image
+        value: yourusername/terminal-user-image:latest
       - key: PORT
-        value: 3000
+        value: 3000  # Port the server will listen on
