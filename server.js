@@ -8,9 +8,13 @@ const rateLimit = require('express-rate-limit');
 const Docker = require('dockerode');
 const morgan = require('morgan');
 const helmet = require('helmet');
+const dockerRoutes = require('./docker-routes');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Import Docker authentication module
+const dockerAuth = require('./docker-auth');
 
 // Docker connection with better error handling
 let docker;
@@ -18,6 +22,28 @@ try {
   // Try to connect to Docker socket
   docker = new Docker();
   console.log('Successfully connected to Docker socket');
+  
+  // Authenticate with Docker Hub
+  (async () => {
+    try {
+      const authenticated = await dockerAuth.authenticateWithDockerHub();
+      if (authenticated) {
+        console.log('Successfully authenticated with Docker Hub');
+        
+        // Ensure default container image is available
+        const imageAvailable = await dockerAuth.ensureImageAvailable(USER_CONTAINER_IMAGE);
+        if (imageAvailable) {
+          console.log(`Container image ${USER_CONTAINER_IMAGE} is available and ready to use`);
+        } else {
+          console.warn(`Could not ensure container image ${USER_CONTAINER_IMAGE} is available`);
+        }
+      } else {
+        console.warn('Failed to authenticate with Docker Hub');
+      }
+    } catch (error) {
+      console.error('Error during Docker Hub authentication:', error);
+    }
+  })();
 } catch (error) {
   console.error('Failed to connect to Docker socket:', error.message);
   console.log('Initializing with mock Docker for testing/development');
@@ -65,7 +91,32 @@ try {
         stop: async () => console.log(`Mock container ${id} stopped`),
         remove: async () => console.log(`Mock container ${id} removed`)
       };
-    }
+    },
+    // Add mock functions for Docker Hub integration
+    pull: async () => {
+      console.log('Mock pull operation');
+      return new Promise(resolve => setTimeout(resolve, 500));
+    },
+    listImages: async () => {
+      return [
+        { 
+          Id: 'sha256:mock123456789', 
+          RepoTags: ['bdgtest/terminal:latest'],
+          Size: 100000000,
+          Created: Math.floor(Date.now() / 1000) - 86400
+        }
+      ];
+    },
+    getImage: () => ({
+      inspect: async () => ({
+        Id: 'sha256:mock123456789',
+        Created: new Date().toISOString(),
+        Config: {
+          Cmd: ['/bin/bash'],
+          Env: ['PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin']
+        }
+      })
+    })
   };
 }
 
@@ -167,6 +218,13 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Make docker and sessions available to routes
+app.locals.docker = docker;
+app.locals.webSessions = webSessions;
+
+// Mount Docker API routes
+app.use('/api/docker', dockerRoutes);
 
 // Helper function to hash passwords
 const hashPassword = (password) => {
@@ -397,10 +455,19 @@ app.post('/api/create-session', validateWebSession, async (req, res) => {
     // Add custom session name if provided
     const sessionName = req.body.sessionName || `Session-${sessionId.substring(0, 8)}`;
     
+    // Extract image tag if provided
+    const containerImage = req.body.containerImage || USER_CONTAINER_IMAGE;
+    
     try {
+      // Ensure the image is available before creating the container
+      const imageAvailable = await dockerAuth.ensureImageAvailable(containerImage);
+      if (!imageAvailable) {
+        console.warn(`Could not ensure image ${containerImage} is available. Using default image.`);
+      }
+      
       // Create Docker container with error handling
       const container = await docker.createContainer({
-        Image: USER_CONTAINER_IMAGE,
+        Image: containerImage,
         Cmd: ['/bin/bash'],
         Tty: true,
         OpenStdin: true,
@@ -423,7 +490,8 @@ app.post('/api/create-session', validateWebSession, async (req, res) => {
           'sessionId': sessionId,
           'clientIp': clientIp,
           'webUser': req.webSession.username,
-          'sessionName': sessionName
+          'sessionName': sessionName,
+          'containerImage': containerImage
         }
       });
       
@@ -439,22 +507,39 @@ app.post('/api/create-session', validateWebSession, async (req, res) => {
         lastAccessed: Date.now(),
         webUser: req.webSession.username,
         sessionName: sessionName,
+        containerImage: containerImage,
         commandCount: 0, // Track number of commands executed
         logs: [] // Store recent command logs
       };
       
-      console.log(`Created new container for web user ${userId} from IP ${clientIp}`);
+      console.log(`Created new container (${containerImage}) for web user ${userId} from IP ${clientIp}`);
       
       // Return session information to client
       res.json({
         sessionId,
         userId,
         sessionName,
+        containerImage,
         message: 'Session created successfully',
         expiresIn: SESSION_TIMEOUT,
       });
     } catch (dockerError) {
       console.error('Docker container creation error:', dockerError);
+      
+      // Handle Docker authentication or pull errors
+      if (dockerError.message && (
+          dockerError.message.includes('authentication required') || 
+          dockerError.message.includes('not found') || 
+          dockerError.message.includes('pull access denied'))) {
+        console.error(`Docker image access error: ${dockerError.message}`);
+        
+        // Try to use the default image instead
+        if (containerImage !== USER_CONTAINER_IMAGE) {
+          console.log(`Retrying with default image: ${USER_CONTAINER_IMAGE}`);
+          req.body.containerImage = USER_CONTAINER_IMAGE;
+          return await createSessionWithImage(req, res);
+        }
+      }
       
       // Handle Docker socket error gracefully
       if (dockerError.message.includes('connect ENOENT /var/run/docker.sock')) {
@@ -470,6 +555,7 @@ app.post('/api/create-session', validateWebSession, async (req, res) => {
           lastAccessed: Date.now(),
           webUser: req.webSession.username,
           sessionName: sessionName,
+          containerImage: containerImage,
           isMock: true,
           commandCount: 0,
           logs: []
@@ -484,6 +570,7 @@ app.post('/api/create-session', validateWebSession, async (req, res) => {
           sessionId,
           userId,
           sessionName,
+          containerImage,
           message: 'Session created in mock mode (Docker unavailable)',
           expiresIn: SESSION_TIMEOUT,
           isMock: true
