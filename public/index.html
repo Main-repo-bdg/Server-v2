@@ -6,6 +6,8 @@
   <title>Terminal Server</title>
   <link rel="stylesheet" href="css/style.css">
   <link rel="stylesheet" href="css/admin.css">
+  <link rel="stylesheet" href="css/style-fixes.css">
+  <link rel="stylesheet" href="css/style-additions.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.1.0/css/xterm.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -69,7 +71,10 @@
     <!-- Main App Section -->
     <div id="main-container" class="main-container" style="display: none;">
       <!-- Sidebar -->
-      <div class="sidebar">
+      <div class="sidebar" id="sidebar">
+        <button id="sidebar-toggle" title="Toggle Sidebar">
+          <i class="fas fa-chevron-left"></i>
+        </button>
         <div class="sidebar-header">
           <i class="fas fa-terminal"></i>
           <h2>Terminal Server</h2>
@@ -423,6 +428,15 @@
             <label for="session-name">Session Name (optional)</label>
             <input type="text" id="session-name" placeholder="My Terminal Session">
           </div>
+          <div class="input-group">
+            <label for="session-image">Docker Image</label>
+            <div class="input-with-button">
+              <input type="text" id="session-image" value="bdgtest/terminal:latest" placeholder="e.g., bdgtest/terminal:latest">
+              <button id="session-image-settings" class="btn btn-sm" title="Select Docker Image">
+                <i class="fas fa-cog"></i>
+              </button>
+            </div>
+          </div>
           <div class="error-message" id="new-session-error"></div>
         </div>
         <div class="modal-footer">
@@ -441,6 +455,10 @@
   <script src="js/sessions.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/admin.js"></script>
+  <script src="js/docker-manager.js"></script>
+  <script src="js/admin-docker.js"></script>
+  <script src="js/ui-fixes.js"></script>
+  <script src="js/image-modal.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

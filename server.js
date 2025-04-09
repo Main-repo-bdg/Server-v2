@@ -31,13 +31,32 @@ try {
         console.log('Successfully authenticated with Docker Hub');
         
         // Ensure default container image is available
-        // Hard-code the image name as requested instead of using environment variable
+        // Try multiple times to ensure we get the image
         const defaultImage = 'bdgtest/terminal:latest';
-        const imageAvailable = await dockerAuth.ensureImageAvailable(defaultImage);
-        if (imageAvailable) {
-          console.log(`Container image ${defaultImage} is available and ready to use`);
+        console.log(`Checking for image: ${defaultImage}`);
+        
+        // First check if image exists locally
+        const exists = await dockerAuth.imageExists(defaultImage);
+        if (exists) {
+          console.log(`Image ${defaultImage} already exists locally`);
         } else {
-          console.warn(`Could not ensure container image ${defaultImage} is available`);
+          console.log(`Image ${defaultImage} not found locally, pulling...`);
+          
+          // Try multiple pull attempts with backoff
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            console.log(`Pull attempt ${attempt} for ${defaultImage}`);
+            const imageAvailable = await dockerAuth.pullDockerImage(defaultImage);
+            
+            if (imageAvailable) {
+              console.log(`Successfully pulled image on attempt ${attempt}: ${defaultImage}`);
+              break;
+            } else if (attempt < 3) {
+              console.log(`Pull attempt ${attempt} failed, waiting before retry...`);
+              await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+            } else {
+              console.warn(`All pull attempts failed for ${defaultImage}`);
+            }
+          }
         }
       } else {
         console.warn('Failed to authenticate with Docker Hub');
