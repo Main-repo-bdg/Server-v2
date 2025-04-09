@@ -1,0 +1,321 @@
+/**
+ * style-fixes.css - Fixes and improvements to the Terminal Server UI
+ */
+
+/* Sidebar Toggle Button */
+#sidebar-toggle {
+  position: absolute;
+  top: 15px;
+  right: -15px;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s;
+}
+
+#sidebar-toggle:hover {
+  background-color: var(--primary);
+  color: var(--bg-primary);
+}
+
+/* Sidebar collapsed state */
+.sidebar-collapsed {
+  transform: translateX(-250px);
+}
+
+.main-content-expanded {
+  margin-left: 0;
+}
+
+#sidebar-toggle.collapsed {
+  transform: translateX(250px) rotate(180deg);
+}
+
+/* Dashboard Active Buttons */
+.dashboard-section {
+  position: relative;
+}
+
+.no-data-message {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Admin tab navigation */
+.admin-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
+}
+
+.admin-tab-button {
+  padding: 10px 15px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--text-primary);
+  border-bottom: 2px solid transparent;
+  transition: all 0.3s;
+}
+
+.admin-tab-button.active {
+  border-bottom: 2px solid var(--primary);
+  color: var(--primary);
+  font-weight: 500;
+}
+
+.admin-tab-button:hover:not(.active) {
+  border-bottom: 2px solid var(--text-secondary);
+}
+
+/* Docker image selection modal */
+#image-select-modal .modal-body {
+  padding: 20px;
+}
+
+.image-select-container {
+  margin-bottom: 20px;
+}
+
+.image-select-label {
+  display: block;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.docker-tag-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.docker-tag {
+  padding: 10px;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.docker-tag:hover, .docker-tag.selected {
+  background-color: var(--bg-hover);
+}
+
+.docker-tag:last-child {
+  border-bottom: none;
+}
+
+/* Loading overlay */
+.loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  border-radius: inherit;
+}
+
+.loading-message {
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 15px 20px;
+  border-radius: 4px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Docker Pull Progress */
+.pull-progress {
+  margin-top: 15px;
+  width: 100%;
+  height: 20px;
+  background-color: var(--bg-primary);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.pull-progress-bar {
+  height: 100%;
+  background-color: var(--primary);
+  width: 0%;
+  transition: width 0.5s;
+  position: relative;
+}
+
+.pull-progress-text {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Tooltip enhancements */
+.tooltip {
+  position: relative;
+  display: inline-block;
+}
+
+.tooltip .tooltiptext {
+  visibility: hidden;
+  width: auto;
+  min-width: 120px;
+  background-color: var(--bg-tertiary);
+  color: var(--text-primary);
+  text-align: center;
+  border-radius: 6px;
+  padding: 8px 12px;
+  position: absolute;
+  z-index: 1100;
+  bottom: 125%;
+  left: 50%;
+  transform: translateX(-50%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  white-space: nowrap;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  font-size: 0.8rem;
+}
+
+.tooltip .tooltiptext::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  margin-left: -5px;
+  border-width: 5px;
+  border-style: solid;
+  border-color: var(--bg-tertiary) transparent transparent transparent;
+}
+
+.tooltip:hover .tooltiptext {
+  visibility: visible;
+  opacity: 1;
+}
+
+/* Docker tab styling */
+.docker-container {
+  margin-top: 20px;
+}
+
+.docker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.docker-header h3 {
+  margin: 0;
+}
+
+.docker-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.docker-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 15px;
+  margin-bottom: 20px;
+}
+
+.docker-stat {
+  background-color: var(--bg-primary);
+  padding: 15px;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+}
+
+.docker-stat-title {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 5px;
+}
+
+.docker-stat-value {
+  font-size: 1.2rem;
+  font-weight: 500;
+}
+
+.docker-error {
+  background-color: var(--bg-primary);
+  color: var(--danger);
+  padding: 15px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.docker-error i {
+  font-size: 1.5rem;
+}
+
+/* Image pull form */
+.pull-form {
+  background-color: var(--bg-primary);
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 20px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+
+.pull-form-title {
+  font-size: 1rem;
+  font-weight: 500;
+  margin-bottom: 10px;
+}
+
+.pull-form-input {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.pull-form-input input {
+  flex: 1;
+}
+
+/* Fix modal buttons */
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+
+.modal-close:hover {
+  color: var(--danger);
+}

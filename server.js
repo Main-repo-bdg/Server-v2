@@ -9,6 +9,7 @@ const Docker = require('dockerode');
 const morgan = require('morgan');
 const helmet = require('helmet');
 const dockerRoutes = require('./docker-routes');
+const startupDocker = require('./startup-docker');
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -31,13 +32,32 @@ try {
         console.log('Successfully authenticated with Docker Hub');
         
         // Ensure default container image is available
-        // Hard-code the image name as requested instead of using environment variable
+        // Try multiple times to ensure we get the image
         const defaultImage = 'bdgtest/terminal:latest';
-        const imageAvailable = await dockerAuth.ensureImageAvailable(defaultImage);
-        if (imageAvailable) {
-          console.log(`Container image ${defaultImage} is available and ready to use`);
+        console.log(`Checking for image: ${defaultImage}`);
+        
+        // First check if image exists locally
+        const exists = await dockerAuth.imageExists(defaultImage);
+        if (exists) {
+          console.log(`Image ${defaultImage} already exists locally`);
         } else {
-          console.warn(`Could not ensure container image ${defaultImage} is available`);
+          console.log(`Image ${defaultImage} not found locally, pulling...`);
+          
+          // Try multiple pull attempts with backoff
+          for (let attempt = 1; attempt <= 3; attempt++) {
+            console.log(`Pull attempt ${attempt} for ${defaultImage}`);
+            const imageAvailable = await dockerAuth.pullDockerImage(defaultImage);
+            
+            if (imageAvailable) {
+              console.log(`Successfully pulled image on attempt ${attempt}: ${defaultImage}`);
+              break;
+            } else if (attempt < 3) {
+              console.log(`Pull attempt ${attempt} failed, waiting before retry...`);
+              await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+            } else {
+              console.warn(`All pull attempts failed for ${defaultImage}`);
+            }
+          }
         }
       } else {
         console.warn('Failed to authenticate with Docker Hub');
@@ -458,14 +478,39 @@ app.post('/api/create-session', validateWebSession, async (req, res) => {
     // Add custom session name if provided
     const sessionName = req.body.sessionName || `Session-${sessionId.substring(0, 8)}`;
     
-    // Extract image tag if provided
-    const containerImage = req.body.containerImage || USER_CONTAINER_IMAGE;
+    // Extract image tag if provided, default to the hardcoded default image
+    let containerImage = req.body.containerImage || USER_CONTAINER_IMAGE;
     
     try {
+      // Check if we should try to use the default image from Docker Hub first
+      if (!containerImage || containerImage === USER_CONTAINER_IMAGE) {
+        // First ensure our default image exists and is available
+        console.log(`Ensuring default image ${startupDocker.DEFAULT_IMAGE} is available...`);
+        
+        // Try to use the default image from our automatic initialization
+        const defaultImageAvailable = await dockerAuth.pullDockerImage(startupDocker.DEFAULT_IMAGE);
+        if (defaultImageAvailable) {
+          containerImage = startupDocker.DEFAULT_IMAGE;
+          console.log(`Using default image from Docker Hub: ${containerImage}`);
+        } else {
+          console.log(`Default image not available in Docker Hub, using fallback: ${USER_CONTAINER_IMAGE}`);
+        }
+      }
+      
       // Ensure the image is available before creating the container
       const imageAvailable = await dockerAuth.ensureImageAvailable(containerImage);
       if (!imageAvailable) {
         console.warn(`Could not ensure image ${containerImage} is available. Using default image.`);
+        
+        // If we can't ensure the requested image, try one last fallback to auto-build a default image
+        if (containerImage !== USER_CONTAINER_IMAGE) {
+          console.log(`Attempting to build default image as fallback...`);
+          const built = await startupDocker.buildAndPushDefaultImage();
+          if (built) {
+            containerImage = startupDocker.DEFAULT_IMAGE;
+            console.log(`Built and will use default image: ${containerImage}`);
+          }
+        }
       }
       
       // Create Docker container with error handling
@@ -536,9 +581,79 @@ app.post('/api/create-session', validateWebSession, async (req, res) => {
           dockerError.message.includes('pull access denied'))) {
         console.error(`Docker image access error: ${dockerError.message}`);
         
-        // Try to use the default image instead
+        // Try to auto-build the default image if needed
+        console.log('Attempting to auto-build default image');
+        try {
+          const imageBuilt = await startupDocker.buildAndPushDefaultImage();
+          if (imageBuilt) {
+            console.log('Successfully built default image, retrying with it');
+            containerImage = startupDocker.DEFAULT_IMAGE;
+            // Try again with the newly built image
+            const container = await docker.createContainer({
+              Image: containerImage,
+              Cmd: ['/bin/bash'],
+              Tty: true,
+              OpenStdin: true,
+              StdinOnce: false,
+              AttachStdin: true,
+              AttachStdout: true,
+              AttachStderr: true,
+              HostConfig: {
+                Memory: CONTAINER_MEMORY,
+                CpuShares: Math.floor(parseFloat(CONTAINER_CPU) * 1024),
+                NetworkMode: 'bridge',
+                AutoRemove: true,
+                SecurityOpt: ['no-new-privileges'],
+                CapDrop: ['ALL'], // Drop all capabilities for security
+                ReadonlyRootfs: false, // Allow package installation
+              },
+              Labels: {
+                'app': 'terminal-server',
+                'userId': userId,
+                'sessionId': sessionId,
+                'clientIp': clientIp,
+                'webUser': req.webSession.username,
+                'sessionName': sessionName,
+                'containerImage': containerImage
+              }
+            });
+            
+            await container.start();
+            containerCount++;
+            
+            // Store session information
+            sessions[sessionId] = {
+              userId,
+              clientIp,
+              containerId: container.id,
+              created: Date.now(),
+              lastAccessed: Date.now(),
+              webUser: req.webSession.username,
+              sessionName: sessionName,
+              containerImage: containerImage,
+              commandCount: 0, // Track number of commands executed
+              logs: [] // Store recent command logs
+            };
+            
+            console.log(`Created new container (${containerImage}) after auto-build for user ${userId}`);
+            
+            // Return session information to client
+            return res.json({
+              sessionId,
+              userId,
+              sessionName,
+              containerImage,
+              message: 'Session created successfully with auto-built image',
+              expiresIn: SESSION_TIMEOUT,
+            });
+          }
+        } catch (buildError) {
+          console.error('Failed to auto-build default image:', buildError);
+        }
+        
+        // If auto-build failed, try to use the default image instead
         if (containerImage !== USER_CONTAINER_IMAGE) {
-          console.log(`Retrying with default image: ${USER_CONTAINER_IMAGE}`);
+          console.log(`Retrying with hardcoded default image: ${USER_CONTAINER_IMAGE}`);
           req.body.containerImage = USER_CONTAINER_IMAGE;
           return await createSessionWithImage(req, res);
         }
@@ -1162,6 +1277,26 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
+// Initialize and start server
 app.listen(port, () => {
   console.log(`Terminal server running on port ${port}`);
+  
+  // Initialize Docker in the background
+  console.log('Starting automatic Docker initialization...');
+  try {
+    // Run Docker initialization in the background so it doesn't block server startup
+    startupDocker.initializeDocker()
+      .then(result => {
+        if (result) {
+          console.log('Docker initialization completed successfully.');
+        } else {
+          console.warn('Docker initialization completed with some issues.');
+        }
+      })
+      .catch(error => {
+        console.error('Docker initialization failed:', error);
+      });
+  } catch (error) {
+    console.error('Error starting Docker initialization:', error);
+  }
 });

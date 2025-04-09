@@ -202,6 +202,11 @@ class Auth {
     // Show admin panel if user is admin
     if (this.isAdmin) {
       this.adminPanel.style.display = 'block';
+      
+      // Initialize admin Docker tab if not already present
+      if (window.uiManager) {
+        window.uiManager.createAdminDockerTab();
+      }
     } else {
       this.adminPanel.style.display = 'none';
     }

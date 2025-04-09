@@ -6,6 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const dockerAuth = require('./docker-auth');
+const startupDocker = require('./startup-docker');
 const fs = require('fs');
 const path = require('path');
 
@@ -45,14 +46,16 @@ router.get('/images', validateWebSession, async (req, res) => {
   try {
     const images = await dockerAuth.listDockerImages();
     
-    // Get default image from environment
-    const defaultImage = process.env.USER_CONTAINER_IMAGE || dockerAuth.DEFAULT_IMAGE;
+    // Get default image from startup-docker module
+    const defaultImage = startupDocker.DEFAULT_IMAGE;
     
     // Add isDefault flag for UI
     const formattedImages = images.map(image => {
       return {
         ...image,
-        isDefault: image.tags.includes(defaultImage)
+        isDefault: image.tags && Array.isArray(image.tags) 
+          ? image.tags.includes(defaultImage) 
+          : image.tags === defaultImage
       };
     });
     
@@ -267,6 +270,147 @@ router.delete('/images/:id', validateWebSession, requireAdmin, async (req, res) 
     
     res.status(500).json({ error: 'Failed to remove Docker image: ' + error.message });
   }
+});
+
+// Auto-Docker routes for automated image management
+
+// Get Docker auto-initialization status
+router.get('/auto-status', validateWebSession, requireAdmin, async (req, res) => {
+  try {
+    // Check if default image exists
+    const defaultImageExists = await dockerAuth.imageExists(startupDocker.DEFAULT_IMAGE);
+    
+    // Get all images
+    const images = await dockerAuth.listDockerImages();
+    
+    // Get available tags
+    const availableTags = images.reduce((tags, image) => {
+      if (image.tags && Array.isArray(image.tags)) {
+        return [...tags, ...image.tags.filter(tag => tag.startsWith('bdgtest/terminal:'))];
+      } else if (typeof image.tags === 'string' && image.tags.startsWith('bdgtest/terminal:')) {
+        return [...tags, image.tags];
+      }
+      return tags;
+    }, []);
+    
+    // Format images for the UI
+    const formattedImages = images
+      .filter(image => {
+        // Filter to only include images from our repository
+        if (Array.isArray(image.tags)) {
+          return image.tags.some(tag => tag.startsWith('bdgtest/terminal:'));
+        } else if (typeof image.tags === 'string') {
+          return image.tags.startsWith('bdgtest/terminal:');
+        }
+        return false;
+      })
+      .map(image => {
+        // Extract tag from full image name
+        let tag = '';
+        if (Array.isArray(image.tags) && image.tags.length > 0) {
+          tag = image.tags[0].replace('bdgtest/terminal:', '');
+        } else if (typeof image.tags === 'string') {
+          tag = image.tags.replace('bdgtest/terminal:', '');
+        }
+        
+        return {
+          id: image.id,
+          tag,
+          created: image.created,
+          size: image.size,
+          isDefault: image.tags && (
+            (Array.isArray(image.tags) && image.tags.includes(startupDocker.DEFAULT_IMAGE)) ||
+            image.tags === startupDocker.DEFAULT_IMAGE
+          )
+        };
+      });
+    
+    // Return status
+    res.json({
+      defaultImageExists,
+      lastBuilt: defaultImageExists ? new Date().toISOString() : null, // We don't have real build date info yet
+      availableTags,
+      images: formattedImages
+    });
+  } catch (error) {
+    console.error('Error getting Docker auto-status:', error);
+    res.status(500).json({ error: 'Failed to get Docker auto-status: ' + error.message });
+  }
+});
+
+// Rebuild default image
+router.post('/rebuild-default', validateWebSession, requireAdmin, async (req, res) => {
+  try {
+    // Start build process in the background
+    const buildProcess = startupDocker.buildAndPushDefaultImage()
+      .then(result => {
+        console.log(`Build process completed with result: ${result}`);
+        // Store build result for status checks
+        req.app.locals.lastBuild = {
+          completed: true,
+          success: result,
+          timestamp: new Date().toISOString()
+        };
+      })
+      .catch(error => {
+        console.error('Build process failed:', error);
+        // Store error for status checks
+        req.app.locals.lastBuild = {
+          completed: true,
+          success: false,
+          error: error.message,
+          timestamp: new Date().toISOString()
+        };
+      });
+    
+    // Store build status for status checks
+    req.app.locals.lastBuild = {
+      completed: false,
+      timestamp: new Date().toISOString()
+    };
+    
+    // Return immediate response
+    res.json({ 
+      message: 'Default image rebuild initiated',
+      buildId: Date.now().toString()
+    });
+  } catch (error) {
+    console.error('Error rebuilding default image:', error);
+    res.status(500).json({ error: 'Failed to rebuild default image: ' + error.message });
+  }
+});
+
+// Create version tag
+router.post('/create-version-tag', validateWebSession, requireAdmin, async (req, res) => {
+  try {
+    // Create version tag
+    const versionTag = startupDocker.getVersionInfo();
+    const result = await startupDocker.createImageTag('latest', versionTag);
+    
+    if (!result) {
+      throw new Error('Failed to create version tag');
+    }
+    
+    res.json({ 
+      message: 'Version tag created successfully',
+      tag: versionTag
+    });
+  } catch (error) {
+    console.error('Error creating version tag:', error);
+    res.status(500).json({ error: 'Failed to create version tag: ' + error.message });
+  }
+});
+
+// Check build status
+router.get('/build-status', validateWebSession, requireAdmin, (req, res) => {
+  // Return current build status
+  const buildStatus = req.app.locals.lastBuild || {
+    completed: true,
+    success: false,
+    error: 'No build information available'
+  };
+  
+  res.json(buildStatus);
 });
 
 module.exports = router;
