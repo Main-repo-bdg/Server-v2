@@ -9,9 +9,11 @@ class App {
     
     // Welcome session button
     const welcomeNewSessionBtn = document.getElementById('welcome-new-session-btn');
-    welcomeNewSessionBtn.addEventListener('click', () => {
-      sessionManager.createSession();
-    });
+    if (welcomeNewSessionBtn) {
+      welcomeNewSessionBtn.addEventListener('click', () => {
+        sessionManager.createSession();
+      });
+    }
   }
   
   init() {
@@ -33,14 +35,15 @@ class App {
     // Handle Escape key to close modals
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
-        const settingsModal = document.getElementById('settings-modal');
-        if (settingsModal.style.display === 'flex') {
-          settingsModal.style.display = 'none';
-        }
+        document.querySelectorAll('.modal').forEach(modal => {
+          if (modal.style.display === 'flex') {
+            modal.style.display = 'none';
+          }
+        });
       }
     });
     
-    // Handle browser close/refresh
+    // Handle browser close/refresh warnings
     window.addEventListener('beforeunload', (e) => {
       // If there are active terminals, show a confirmation
       const activeTerminals = Object.keys(terminalManager.terminals).length;
@@ -50,18 +53,25 @@ class App {
         return message;
       }
     });
+    
+    // Initialize notifications container
+    this.createNotificationContainer();
+  }
+  
+  createNotificationContainer() {
+    // Create notification container if it doesn't exist
+    if (!document.querySelector('.notification-container')) {
+      const container = document.createElement('div');
+      container.className = 'notification-container';
+      document.body.appendChild(container);
+    }
   }
   
   // Utility method to show a notification
   showNotification(message, type = 'info') {
-    // Create notification element if it doesn't exist
-    let notificationContainer = document.querySelector('.notification-container');
-    
-    if (!notificationContainer) {
-      notificationContainer = document.createElement('div');
-      notificationContainer.className = 'notification-container';
-      document.body.appendChild(notificationContainer);
-    }
+    // Create notification container if it doesn't exist
+    this.createNotificationContainer();
+    const notificationContainer = document.querySelector('.notification-container');
     
     // Create notification
     const notification = document.createElement('div');
@@ -94,6 +104,55 @@ class App {
         }, 300);
       }
     }, 5000);
+    
+    return notification;
+  }
+  
+  // Check if Docker is available by attempting to create a session
+  async checkDockerAvailability() {
+    try {
+      // Try to create a session - if Docker is unavailable it will create a mock session
+      const session = await sessionManager.createSessionWithName('Docker-Test');
+      
+      // Check if the session is in mock mode
+      if (session && session.isMock) {
+        console.log('Docker is unavailable, running in mock mode');
+        this.showNotification('Docker is unavailable. Running in mock mode with simulated terminal functionality.', 'warning');
+        return false;
+      } else {
+        console.log('Docker is available');
+        return true;
+      }
+    } catch (error) {
+      console.error('Error checking Docker availability:', error);
+      this.showNotification('Could not verify Docker status. Some features may be limited.', 'warning');
+      return false;
+    }
+  }
+  
+  // Handle session reconnection
+  async reconnectSession(sessionId) {
+    try {
+      // Fetch session details to check if it's still valid
+      const response = await fetch(`/api/session/${sessionId}`, {
+        headers: auth.getAuthHeaders()
+      });
+      
+      if (response.ok) {
+        // Session is still valid, reconnect
+        sessionManager.selectSession(sessionId);
+        this.showNotification('Reconnected to terminal session', 'success');
+        return true;
+      } else {
+        // Session is invalid, show message
+        this.showNotification('Could not reconnect to session. It may have expired.', 'error');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error reconnecting to session:', error);
+      this.showNotification('Failed to reconnect: ' + error.message, 'error');
+      return false;
+    }
   }
 }
 
@@ -165,4 +224,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   `;
   document.head.appendChild(style);
+  
+  // Check Docker status after a short delay
+  setTimeout(() => {
+    window.app.checkDockerAvailability();
+  }, 2000);
 });

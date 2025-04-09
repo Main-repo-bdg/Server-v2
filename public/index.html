@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Terminal Server</title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/admin.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.1.0/css/xterm.min.css">
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
   <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -95,6 +96,15 @@
             <h3>Admin</h3>
             <button id="view-all-sessions-btn" class="sidebar-button">
               <i class="fas fa-users"></i> All Sessions
+            </button>
+            <button id="admin-dashboard-btn" class="sidebar-button">
+              <i class="fas fa-chart-line"></i> Dashboard
+            </button>
+            <button id="admin-users-btn" class="sidebar-button">
+              <i class="fas fa-user-cog"></i> Manage Users
+            </button>
+            <button id="admin-system-btn" class="sidebar-button">
+              <i class="fas fa-server"></i> System Status
             </button>
           </div>
         </div>
@@ -187,10 +197,236 @@
                 Cursor Blink
               </label>
             </div>
+            <div class="setting-item">
+              <label>
+                <input type="checkbox" id="setting-auto-reconnect" checked>
+                Auto Reconnect on Error
+              </label>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
           <button id="settings-save" class="btn btn-primary">Save Settings</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Admin Dashboard Modal -->
+    <div id="admin-dashboard-modal" class="modal">
+      <div class="modal-content modal-lg">
+        <div class="modal-header">
+          <h2>Admin Dashboard</h2>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="dashboard-stats">
+            <div class="stat-card">
+              <div class="stat-title">Active Sessions</div>
+              <div class="stat-value" id="stat-active-sessions">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-title">Total Users</div>
+              <div class="stat-value" id="stat-total-users">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-title">Commands Run</div>
+              <div class="stat-value" id="stat-commands-run">--</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-title">Docker Status</div>
+              <div class="stat-value" id="stat-docker-status">--</div>
+            </div>
+          </div>
+          
+          <div class="dashboard-section">
+            <h3>Active Sessions</h3>
+            <div class="table-responsive">
+              <table class="admin-table" id="active-sessions-table">
+                <thead>
+                  <tr>
+                    <th>Session ID</th>
+                    <th>User</th>
+                    <th>Created</th>
+                    <th>Idle Time</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="active-sessions-tbody">
+                  <tr><td colspan="5" class="text-center">Loading sessions...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <div class="dashboard-section">
+            <h3>System Status</h3>
+            <div class="system-status" id="system-status">
+              <div class="status-item">
+                <span class="status-label">Docker:</span>
+                <span class="status-value" id="docker-status">Checking...</span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">API:</span>
+                <span class="status-value" id="api-status">Checking...</span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">Container Quota:</span>
+                <span class="status-value" id="container-quota">Checking...</span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">Mode:</span>
+                <span class="status-value" id="operation-mode">Checking...</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="refresh-dashboard" class="btn btn-primary">
+            <i class="fas fa-sync"></i> Refresh
+          </button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- User Management Modal -->
+    <div id="admin-users-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>User Management</h2>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="action-bar">
+            <button id="add-user-btn" class="btn btn-sm btn-primary">
+              <i class="fas fa-user-plus"></i> Add User
+            </button>
+          </div>
+          
+          <div class="table-responsive">
+            <table class="admin-table" id="users-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Sessions</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="users-tbody">
+                <tr><td colspan="4" class="text-center">Loading users...</td></tr>
+              </tbody>
+            </table>
+          </div>
+          
+          <div id="add-user-form" class="admin-form" style="display:none;">
+            <h3>Add New User</h3>
+            <div class="input-group">
+              <label for="new-username">Username</label>
+              <input type="text" id="new-username" required>
+            </div>
+            <div class="input-group">
+              <label for="new-password">Password</label>
+              <input type="password" id="new-password" required>
+            </div>
+            <div class="input-group">
+              <label>
+                <input type="checkbox" id="new-user-admin"> Admin Privileges
+              </label>
+            </div>
+            <div class="form-actions">
+              <button id="submit-new-user" class="btn btn-primary">Add User</button>
+              <button id="cancel-add-user" class="btn">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Session Details Modal -->
+    <div id="session-details-modal" class="modal">
+      <div class="modal-content modal-lg">
+        <div class="modal-header">
+          <h2>Session Details</h2>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="session-info">
+            <div class="info-row">
+              <div class="info-label">Session ID:</div>
+              <div class="info-value" id="detail-session-id">--</div>
+            </div>
+            <div class="info-row">
+              <div class="info-label">User:</div>
+              <div class="info-value" id="detail-user">--</div>
+            </div>
+            <div class="info-row">
+              <div class="info-label">Created:</div>
+              <div class="info-value" id="detail-created">--</div>
+            </div>
+            <div class="info-row">
+              <div class="info-label">Last Activity:</div>
+              <div class="info-value" id="detail-last-activity">--</div>
+            </div>
+            <div class="info-row">
+              <div class="info-label">Status:</div>
+              <div class="info-value" id="detail-status">--</div>
+            </div>
+            <div class="info-row">
+              <div class="info-label">Container ID:</div>
+              <div class="info-value" id="detail-container-id">--</div>
+            </div>
+            <div class="info-row">
+              <div class="info-label">Client IP:</div>
+              <div class="info-value" id="detail-client-ip">--</div>
+            </div>
+          </div>
+          
+          <div class="session-actions">
+            <button id="session-open-terminal" class="btn btn-primary">
+              <i class="fas fa-terminal"></i> Open Terminal
+            </button>
+            <button id="session-terminate" class="btn btn-danger">
+              <i class="fas fa-times-circle"></i> Terminate Session
+            </button>
+          </div>
+          
+          <div class="dashboard-section">
+            <h3>Recent Commands</h3>
+            <div class="table-responsive">
+              <table class="admin-table" id="commands-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Command</th>
+                    <th>Exit Code</th>
+                  </tr>
+                </thead>
+                <tbody id="commands-tbody">
+                  <tr><td colspan="3" class="text-center">No commands executed yet</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- New Session Modal -->
+    <div id="new-session-modal" class="modal">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h2>Create New Session</h2>
+          <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="input-group">
+            <label for="session-name">Session Name (optional)</label>
+            <input type="text" id="session-name" placeholder="My Terminal Session">
+          </div>
+          <div class="error-message" id="new-session-error"></div>
+        </div>
+        <div class="modal-footer">
+          <button id="create-session-btn" class="btn btn-primary">Create Session</button>
         </div>
       </div>
     </div>
@@ -204,6 +440,7 @@
   <script src="js/terminal.js"></script>
   <script src="js/sessions.js"></script>
   <script src="js/settings.js"></script>
+  <script src="js/admin.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
