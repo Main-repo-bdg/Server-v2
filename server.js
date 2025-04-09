@@ -11,7 +11,63 @@ const helmet = require('helmet');
 
 const app = express();
 const port = process.env.PORT || 3000;
-const docker = new Docker(); // Connect to Docker socket
+
+// Docker connection with better error handling
+let docker;
+try {
+  // Try to connect to Docker socket
+  docker = new Docker();
+  console.log('Successfully connected to Docker socket');
+} catch (error) {
+  console.error('Failed to connect to Docker socket:', error.message);
+  console.log('Initializing with mock Docker for testing/development');
+  // Create a mock Docker interface for environments without Docker socket
+  docker = {
+    createContainer: async () => {
+      const containerId = `mock-container-${uuidv4()}`;
+      console.log(`Mock container created with ID: ${containerId}`);
+      return {
+        id: containerId,
+        start: async () => console.log(`Mock container ${containerId} started`),
+        exec: async () => {
+          return {
+            start: () => {
+              const eventEmitter = new (require('events').EventEmitter)();
+              setTimeout(() => {
+                eventEmitter.emit('data', Buffer.from('Mock command execution output\n'));
+                eventEmitter.emit('end');
+              }, 100);
+              return eventEmitter;
+            },
+            inspect: async () => ({ ExitCode: 0 })
+          };
+        },
+        stop: async () => console.log(`Mock container ${containerId} stopped`),
+        remove: async () => console.log(`Mock container ${containerId} removed`)
+      };
+    },
+    getContainer: (id) => {
+      return {
+        id,
+        exec: async () => {
+          return {
+            start: () => {
+              const eventEmitter = new (require('events').EventEmitter)();
+              setTimeout(() => {
+                eventEmitter.emit('data', Buffer.from('Mock command execution output\n'));
+                eventEmitter.emit('end');
+              }, 100);
+              return eventEmitter;
+            },
+            inspect: async () => ({ ExitCode: 0 })
+          };
+        },
+        stop: async () => console.log(`Mock container ${id} stopped`),
+        remove: async () => console.log(`Mock container ${id} removed`)
+      };
+    }
+  };
+}
 
 // Security configuration
 const API_KEY = process.env.API_KEY || 'change-this-in-production';
@@ -202,18 +258,34 @@ const validateWebSession = (req, res, next) => {
 
 // List all terminal sessions for web UI
 app.get('/api/sessions', validateWebSession, (req, res) => {
-  // Only admins can see all sessions
-  if (!req.webSession.isAdmin) {
-    return res.status(403).json({ error: 'Admin privileges required' });
-  }
+  let sessionList;
   
-  const sessionList = Object.entries(sessions).map(([id, session]) => ({
-    id,
-    userId: session.userId,
-    created: new Date(session.created).toISOString(),
-    lastAccessed: new Date(session.lastAccessed).toISOString(),
-    expiresIn: SESSION_TIMEOUT - (Date.now() - session.lastAccessed)
-  }));
+  if (req.webSession.isAdmin) {
+    // Admins see all sessions with detailed information
+    sessionList = Object.entries(sessions).map(([id, session]) => ({
+      id,
+      userId: session.userId,
+      webUser: session.webUser || 'API User',
+      created: new Date(session.created).toISOString(),
+      lastAccessed: new Date(session.lastAccessed).toISOString(),
+      expiresIn: SESSION_TIMEOUT - (Date.now() - session.lastAccessed),
+      clientIp: session.clientIp,
+      containerId: session.containerId,
+      isActive: true,
+      idleTime: Math.floor((Date.now() - session.lastAccessed) / 1000) // Idle time in seconds
+    }));
+  } else {
+    // Regular users only see their own sessions
+    sessionList = Object.entries(sessions)
+      .filter(([_, session]) => session.webUser === req.webSession.username)
+      .map(([id, session]) => ({
+        id,
+        userId: session.userId,
+        created: new Date(session.created).toISOString(),
+        lastAccessed: new Date(session.lastAccessed).toISOString(),
+        expiresIn: SESSION_TIMEOUT - (Date.now() - session.lastAccessed)
+      }));
+  }
   
   res.json(sessionList);
 });
@@ -322,57 +394,105 @@ app.post('/api/create-session', validateWebSession, async (req, res) => {
     const userId = req.webSession.username || uuidv4();
     const clientIp = req.ip || '0.0.0.0';
     
-    // Create Docker container
-    const container = await docker.createContainer({
-      Image: USER_CONTAINER_IMAGE,
-      Cmd: ['/bin/bash'],
-      Tty: true,
-      OpenStdin: true,
-      StdinOnce: false,
-      AttachStdin: true,
-      AttachStdout: true,
-      AttachStderr: true,
-      HostConfig: {
-        Memory: CONTAINER_MEMORY,
-        CpuShares: Math.floor(parseFloat(CONTAINER_CPU) * 1024),
-        NetworkMode: 'bridge',
-        AutoRemove: true,
-        SecurityOpt: ['no-new-privileges'],
-        CapDrop: ['ALL'], // Drop all capabilities for security
-        ReadonlyRootfs: false, // Allow package installation
-      },
-      Labels: {
-        'app': 'terminal-server',
-        'userId': userId,
-        'sessionId': sessionId,
-        'clientIp': clientIp,
-        'webUser': req.webSession.username
+    // Add custom session name if provided
+    const sessionName = req.body.sessionName || `Session-${sessionId.substring(0, 8)}`;
+    
+    try {
+      // Create Docker container with error handling
+      const container = await docker.createContainer({
+        Image: USER_CONTAINER_IMAGE,
+        Cmd: ['/bin/bash'],
+        Tty: true,
+        OpenStdin: true,
+        StdinOnce: false,
+        AttachStdin: true,
+        AttachStdout: true,
+        AttachStderr: true,
+        HostConfig: {
+          Memory: CONTAINER_MEMORY,
+          CpuShares: Math.floor(parseFloat(CONTAINER_CPU) * 1024),
+          NetworkMode: 'bridge',
+          AutoRemove: true,
+          SecurityOpt: ['no-new-privileges'],
+          CapDrop: ['ALL'], // Drop all capabilities for security
+          ReadonlyRootfs: false, // Allow package installation
+        },
+        Labels: {
+          'app': 'terminal-server',
+          'userId': userId,
+          'sessionId': sessionId,
+          'clientIp': clientIp,
+          'webUser': req.webSession.username,
+          'sessionName': sessionName
+        }
+      });
+      
+      await container.start();
+      containerCount++;
+      
+      // Store session information
+      sessions[sessionId] = {
+        userId,
+        clientIp,
+        containerId: container.id,
+        created: Date.now(),
+        lastAccessed: Date.now(),
+        webUser: req.webSession.username,
+        sessionName: sessionName,
+        commandCount: 0, // Track number of commands executed
+        logs: [] // Store recent command logs
+      };
+      
+      console.log(`Created new container for web user ${userId} from IP ${clientIp}`);
+      
+      // Return session information to client
+      res.json({
+        sessionId,
+        userId,
+        sessionName,
+        message: 'Session created successfully',
+        expiresIn: SESSION_TIMEOUT,
+      });
+    } catch (dockerError) {
+      console.error('Docker container creation error:', dockerError);
+      
+      // Handle Docker socket error gracefully
+      if (dockerError.message.includes('connect ENOENT /var/run/docker.sock')) {
+        // Create a mock session when Docker is unavailable
+        const mockContainerId = `mock-container-${uuidv4()}`;
+        
+        // Store mock session information
+        sessions[sessionId] = {
+          userId,
+          clientIp,
+          containerId: mockContainerId,
+          created: Date.now(),
+          lastAccessed: Date.now(),
+          webUser: req.webSession.username,
+          sessionName: sessionName,
+          isMock: true,
+          commandCount: 0,
+          logs: []
+        };
+        
+        containerCount++;
+        
+        console.log(`Created mock session for web user ${userId} (Docker unavailable)`);
+        
+        // Return session information to client
+        res.json({
+          sessionId,
+          userId,
+          sessionName,
+          message: 'Session created in mock mode (Docker unavailable)',
+          expiresIn: SESSION_TIMEOUT,
+          isMock: true
+        });
+      } else {
+        // Re-throw other errors
+        throw dockerError;
       }
-    });
-    
-    await container.start();
-    containerCount++;
-    
-    // Store session information
-    sessions[sessionId] = {
-      userId,
-      clientIp,
-      containerId: container.id,
-      created: Date.now(),
-      lastAccessed: Date.now(),
-      webUser: req.webSession.username
-    };
-    
-    console.log(`Created new container for web user ${userId} from IP ${clientIp}`);
-    
-    // Return session information to client
-    res.json({
-      sessionId,
-      userId,
-      message: 'Session created successfully',
-      expiresIn: SESSION_TIMEOUT,
-    });
-    
+    }
   } catch (error) {
     console.error('Error creating session:', error);
     res.status(500).json({ error: 'Failed to create session: ' + error.message });
@@ -470,7 +590,7 @@ app.post('/api/execute-command', validateWebSession, async (req, res) => {
     return res.status(401).json({ error: 'Session expired' });
   }
   
-  // Security check - only allow session owner to execute commands
+  // Security check - only allow session owner or admin to execute commands
   if (session.webUser !== req.webSession.username && !req.webSession.isAdmin) {
     return res.status(403).json({ error: 'You can only execute commands in your own sessions' });
   }
@@ -478,24 +598,57 @@ app.post('/api/execute-command', validateWebSession, async (req, res) => {
   // Update last accessed time
   session.lastAccessed = Date.now();
   
+  // Increment command count for metrics
+  session.commandCount = (session.commandCount || 0) + 1;
+  
+  // Create command log entry
+  const logEntry = {
+    timestamp: new Date().toISOString(),
+    userId: session.userId,
+    sessionId: sessionId,
+    clientIp: session.clientIp,
+    command: command,
+    webUser: req.webSession.username
+  };
+  
   try {
-    // Get container
-    const container = docker.getContainer(session.containerId);
-    
     // Log command for audit
-    const logEntry = {
-      timestamp: new Date().toISOString(),
-      userId: session.userId,
-      sessionId: sessionId,
-      clientIp: session.clientIp,
-      command: command,
-      webUser: req.webSession.username
-    };
-    
     fs.appendFileSync(
       path.join(__dirname, 'logs', 'commands.log'), 
       JSON.stringify(logEntry) + '\n'
     );
+    
+    // Store recent command in session history (keep last 10)
+    if (!session.logs) session.logs = [];
+    session.logs.unshift(logEntry);
+    if (session.logs.length > 10) session.logs.pop();
+    
+    // Handle mock sessions differently (when Docker is unavailable)
+    if (session.isMock) {
+      // Simulate command execution for mock sessions
+      setTimeout(() => {
+        const mockOutput = `Executing in mock environment: ${command}\n` +
+          `Mock output for demonstration purposes\n` +
+          `Current time: ${new Date().toISOString()}\n` +
+          `Session ID: ${sessionId}\n` +
+          `User: ${session.userId}\n`;
+        
+        // Add command and response to log
+        logEntry.output = mockOutput;
+        logEntry.exitCode = 0;
+        
+        res.json({ 
+          output: mockOutput, 
+          exitCode: 0,
+          isMock: true
+        });
+      }, 200); // Add small delay to simulate processing
+      
+      return;
+    }
+    
+    // For real Docker sessions, execute command in container
+    const container = docker.getContainer(session.containerId);
     
     // Execute command in container
     const exec = await container.exec({
@@ -516,6 +669,7 @@ app.post('/api/execute-command', validateWebSession, async (req, res) => {
     
     // Handle stream errors
     stream.on('error', (err) => {
+      logEntry.error = err.message;
       res.status(500).json({ error: err.message });
     });
     
@@ -525,6 +679,10 @@ app.post('/api/execute-command', validateWebSession, async (req, res) => {
         // Get exit code
         const inspect = await exec.inspect();
         const exitCode = inspect.ExitCode;
+        
+        // Add results to log entry
+        logEntry.output = output;
+        logEntry.exitCode = exitCode;
         
         if (exitCode !== 0) {
           return res.json({ 
@@ -536,13 +694,32 @@ app.post('/api/execute-command', validateWebSession, async (req, res) => {
         
         res.json({ output, exitCode: 0 });
       } catch (inspectError) {
+        logEntry.error = 'Failed to get command status';
         res.status(500).json({ error: 'Failed to get command status' });
       }
     });
     
   } catch (error) {
     console.error('Error executing command:', error);
-    res.status(500).json({ error: 'Failed to execute command: ' + error.message });
+    logEntry.error = error.message;
+    
+    // If Docker socket error, handle gracefully
+    if (error.message && error.message.includes('connect ENOENT /var/run/docker.sock')) {
+      // Switch session to mock mode if Docker becomes unavailable
+      session.isMock = true;
+      
+      // Return mock response
+      const mockOutput = `Switched to mock mode (Docker unavailable).\n` +
+                         `Mock output for: ${command}\n`;
+      res.json({ 
+        output: mockOutput, 
+        exitCode: 0,
+        isMock: true,
+        switched: true
+      });
+    } else {
+      res.status(500).json({ error: 'Failed to execute command: ' + error.message });
+    }
   }
 });
 

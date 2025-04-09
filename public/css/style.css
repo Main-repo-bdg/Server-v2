@@ -512,6 +512,10 @@ html, body {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
 }
 
+.modal-lg {
+  max-width: 800px;
+}
+
 .modal-header {
   padding: 1rem;
   border-bottom: 1px solid var(--border-color);
