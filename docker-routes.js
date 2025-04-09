@@ -194,8 +194,8 @@ router.get('/stats', validateWebSession, requireAdmin, async (req, res) => {
       console.error('Error listing containers:', error);
     }
     
-    // Get default image
-    const defaultImage = process.env.USER_CONTAINER_IMAGE || dockerAuth.DEFAULT_IMAGE;
+    // Get default image (hardcoded as requested)
+    const defaultImage = 'bdgtest/terminal:latest';
     
     // Compile stats
     const stats = {
@@ -228,8 +228,8 @@ router.delete('/images/:id', validateWebSession, requireAdmin, async (req, res) 
     // Get the image
     const image = docker.getImage(id);
     
-    // Check if the image is the default image
-    const defaultImage = process.env.USER_CONTAINER_IMAGE || dockerAuth.DEFAULT_IMAGE;
+    // Check if the image is the default image (hardcoded as requested)
+    const defaultImage = 'bdgtest/terminal:latest';
     const info = await image.inspect();
     
     if (info.RepoTags && info.RepoTags.includes(defaultImage)) {

@@ -31,11 +31,13 @@ try {
         console.log('Successfully authenticated with Docker Hub');
         
         // Ensure default container image is available
-        const imageAvailable = await dockerAuth.ensureImageAvailable(USER_CONTAINER_IMAGE);
+        // Hard-code the image name as requested instead of using environment variable
+        const defaultImage = 'bdgtest/terminal:latest';
+        const imageAvailable = await dockerAuth.ensureImageAvailable(defaultImage);
         if (imageAvailable) {
-          console.log(`Container image ${USER_CONTAINER_IMAGE} is available and ready to use`);
+          console.log(`Container image ${defaultImage} is available and ready to use`);
         } else {
-          console.warn(`Could not ensure container image ${USER_CONTAINER_IMAGE} is available`);
+          console.warn(`Could not ensure container image ${defaultImage} is available`);
         }
       } else {
         console.warn('Failed to authenticate with Docker Hub');
@@ -126,7 +128,8 @@ const SESSION_TIMEOUT = parseInt(process.env.SESSION_TIMEOUT || '3600000'); // 1
 const MAX_CONTAINERS = parseInt(process.env.MAX_CONTAINERS || '100');
 const CONTAINER_MEMORY = process.env.CONTAINER_MEMORY || '256m';
 const CONTAINER_CPU = process.env.CONTAINER_CPU || '0.5';
-const USER_CONTAINER_IMAGE = process.env.USER_CONTAINER_IMAGE || 'terminal-user-image:latest';
+// Hard-coded Docker image as requested
+const USER_CONTAINER_IMAGE = 'bdgtest/terminal:latest';
 
 // User storage (for web UI authentication)
 const users = {

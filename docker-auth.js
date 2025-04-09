@@ -8,12 +8,11 @@ const fs = require('fs');
 const path = require('path');
 const Docker = require('dockerode');
 
-// Environment variables for Docker Hub authentication
-// These should be set in the environment, not hardcoded
-const DOCKER_USERNAME = process.env.DOCKER_USERNAME || 'bdgtest';
-const DOCKER_PASSWORD = process.env.DOCKER_PASSWORD || '';
+// Docker Hub authentication credentials (hardcoded as requested)
+const DOCKER_USERNAME = 'bdgtest';
+const DOCKER_PASSWORD = 'dckr_pat_hvhiBx3LQctj5ELYHlLcNJobq8s';
 
-// Default image to use if not specified
+// Default image to use if not specified (hardcoded)
 const DEFAULT_IMAGE = 'bdgtest/terminal:latest';
 
 // Set up Docker client
