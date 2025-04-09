@@ -4,10 +4,6 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     plan: free  # Explicitly set to free tier
-    disk:
-      name: terminal-logs
-      mountPath: /app/logs
-      sizeGB: 1  # 1GB should be sufficient for logs
     envVars:
       - key: API_KEY
         sync: false  # This will prompt for the value during deployment
