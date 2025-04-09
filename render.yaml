@@ -21,6 +21,6 @@ services:
         # docker build -t yourusername/terminal-user-image:latest -f Dockerfile.user .
         # docker push yourusername/terminal-user-image:latest
         # Then update this value to point to your Docker Hub image
-        value: yourusername/terminal-user-image:latest
+        value: bdgtest/terminal:latest
       - key: PORT
         value: 3000  # Port the server will listen on
